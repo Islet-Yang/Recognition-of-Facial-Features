@@ -31,8 +31,8 @@ class ModelWorking:
         self.train_patience = 30  # patience for early stopping
         self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')  # Check GPU and use it
         
-        self.model = DenseConv(self.num_classes, self.batch_size).to(self.device)  # Initialize the model
-        # self.model = ResNet(self.num_classes).to(self.device) # Initialize the model
+        # self.model = DenseConv(self.num_classes, self.batch_size).to(self.device)  # Initialize the model
+        self.model = ResNet(self.num_classes).to(self.device) # Initialize the model
         self.criterion = nn.CrossEntropyLoss()  # Initialize the loss function
         # Using Adam as optimizer as an example. SGD is another common choice.
         self.optimizer = torch.optim.Adam(self.model.parameters()) # Initialize the optimizer
