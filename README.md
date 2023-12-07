@@ -1,5 +1,5 @@
 # Recognition-of-Facial-Features
-This is one of the course assignments of 2023 Autumn Introduction to Artificial Intelligence of the Department of Automation, Tsinghua University.The background is given 50,000 face images with size in 178/*218/*3 , corresponding to 40 face features and labels. We need to do an image classification task on it.
+This is one of the course assignments of 2023 Autumn Introduction to Artificial Intelligence of the Department of Automation, Tsinghua University.The background is given 50,000 face images with size in 178_218_3 , corresponding to 40 face features and labels. We need to do an image classification task on it.
     
 Specific task implementation and modules explanations are as follows:  
     
