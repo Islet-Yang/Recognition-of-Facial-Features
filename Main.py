@@ -12,6 +12,8 @@ from MyDataset import MyDataset
 from ResNet import ResNet
 from DenseConv import DenseConv
 from EarlyStopping import EarlyStopping
+from Conv import Conv
+from sklearn.metrics import precision_score, recall_score, f1_score
 
 class ModelWorking:
     def __init__(self, characteristic_list):
@@ -19,31 +21,39 @@ class ModelWorking:
         Initialize all parameters, data sets, and model
         '''
         self.seed = 19  # seed number
+        self.set_seed(self.seed)  # Fix the seed
         self.image_path = './data_face_imgs/images'  # image-path
-        self.label_path = './data_face_imgs/anno.csv'  # file-path of the labels
-        self.save_path = 'best_model.pth'  # save-path for the model
-        self.log_file_path = 'log.txt'  # save-path for the log file
+        self.label_path = './data_face_imgs/anno.csv'  # file-path of the labels        
         
-        self.batch_size = 64  # batch_size
+        self.batch_size = 32  # batch_size
         self.epoch = 500  # epochs to train
+        self.learning_rate = 3e-4 # learning rate
+        self.weight_decay = 1e-5 # weight decay
+        self.warm_up = 0.01 # warm up
         self.characteristic_list = characteristic_list # list of characteristics
         self.num_classes = len(self.characteristic_list)  # number of classes
         self.train_patience = 30  # patience for early stopping
         self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')  # Check GPU and use it
         
-        # self.model = DenseConv(self.num_classes, self.batch_size).to(self.device)  # Initialize the model
-        self.model = ResNet(self.num_classes).to(self.device) # Initialize the model
+        # Here choose the model you want to use
+        # self.model = ResNet(self.num_classes).to(self.device) # Initialize the model
+        self.model = Conv(self.num_classes).to(self.device) #Initialize the model
         self.criterion = nn.CrossEntropyLoss()  # Initialize the loss function
+        
         # Using Adam as optimizer as an example. SGD is another common choice.
-        self.optimizer = torch.optim.Adam(self.model.parameters()) # Initialize the optimizer
+        self.optimizer = torch.optim.Adam(self.model.parameters(),lr=self.learning_rate,weight_decay=self.weight_decay) # Initialize the optimizer
+        self.scheduler = torch.optim.lr_scheduler.LambdaLR(self.optimizer, lr_lambda=lambda epoch: 0.1 ** (epoch // 10)) # For warm_up
+        
+        self.save_path = 'best_model.pth'  # save-path for the model
+        self.log_file_path = 'log_'+self.model.getname()+'_'+str(self.num_classes)+'.txt'  # save-path for the log file
+        
         self.early_stopping = EarlyStopping(self.train_patience, checkpoint_path=self.save_path, mode='max') # Initialize the early_stopping object
+        
         self.transforms = transforms.Compose([
         transforms.Resize((224, 224)), # Resize the image to 224x224 (required by ResNet)
         transforms.ToTensor(),
         transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]), # Normalize the image
-        ])
-        
-        self.set_seed(self.seed)  # Fix the seed
+        ])      
 
         # divide train/validation/test dataset
         self.train_ratio = 0.7
@@ -76,6 +86,8 @@ class ModelWorking:
         with torch.no_grad():
             correct = 0
             total = 0
+            predictions = []
+            ground_truth = []
             progress_bar = tqdm(enumerate(loader), total=len(loader), desc='Evaluation')
 
             for batch_idx, (images, labels) in progress_bar:
@@ -90,9 +102,18 @@ class ModelWorking:
 
                 # Update progress bar description
                 progress_bar.set_postfix({'Loss': total_loss / total, 'Accuracy': 100 * correct / total})
+                
+                # Collect predictions and ground truth for precision, recall, f1-score
+                predictions.extend(predicted.cpu().numpy())
+                ground_truth.extend(labels.cpu().numpy())
 
+        # Calculate various metrics
         accuracy = 100 * correct / total # Calculate the accuracy
-        return total_loss / len(loader.dataset), accuracy
+        precision = precision_score(ground_truth, predictions, average='weighted') # Calculate the precision
+        recall = recall_score(ground_truth, predictions, average='weighted') # Calculate the recall
+        f1 = f1_score(ground_truth, predictions, average='weighted') # Calculate the f1-score
+        
+        return total_loss / len(loader.dataset), accuracy, precision, recall, f1
   
     def train(self):
         '''
@@ -100,7 +121,8 @@ class ModelWorking:
         Early stopping is used to stop training when the validation accuracy stops increasing
         '''
         for epoch in range(self.epoch):
-            progress_bar = tqdm(enumerate(self.train_loader), total=len(self.train_loader), desc='Training')           
+            progress_bar = tqdm(enumerate(self.train_loader), total=len(self.train_loader), desc='Training') 
+            self.scheduler.step()          
             for batch_idx, (images, labels) in progress_bar:
                 self.model.train()
                 images = images.to(self.device)
@@ -112,12 +134,12 @@ class ModelWorking:
                 self.optimizer.step()
                 
             print(f'Epoch [{epoch+1}/{self.epoch}], Loss: {loss.item()}')
-            validation_loss, validation_accuracy = self.evaluate_model(self.validation_loader, self.model, self.criterion, self.device) # Evaluate the model on the validation set
+            validation_loss, validation_accuracy, validation_precision, validation_recall, validation_f1 = self.evaluate_model(self.validation_loader, self.model, self.criterion, self.device) # Evaluate the model on the validation set
             
             # Save the log file
             with open(self.log_file_path, 'a') as log_file:
                 log_file.write(f'Epoch [{epoch+1}/{self.epoch}]\n')
-                log_file.write(f'Total Loss: {validation_loss}, Accuracy: {validation_accuracy}\n')
+                log_file.write(f'Total Loss: {validation_loss}, Accuracy: {validation_accuracy}, Precision:{validation_precision}, Recall:{validation_recall}, F1-score:{validation_f1}\n')
                 
             print('Validation Loss:{}'.format(validation_loss))
             print('Validation Accuracy: {}'.format(validation_accuracy))
@@ -136,9 +158,14 @@ class ModelWorking:
         Test the model on the test set
         '''
         self.early_stopping.load_checkpoint(self.model) # Load the best model
-        test_loss, test_accuracy = self.evaluate_model(self.test_loader, self.model, self.criterion, self.device) # Evaluate the model on the test set
+        test_loss, test_accuracy, test_precision, test_recall, test_f1 = self.evaluate_model(self.test_loader, self.model, self.criterion, self.device) # Evaluate the model on the test set
         print('Test Loss:{}'.format(test_loss))
         print('Test Accuracy: {}'.format(test_accuracy))
+        
+        # Save the log file
+        with open(self.log_file_path, 'a') as log_file:
+            log_file.write(f'\nFinal Test:\n')
+            log_file.write(f'Total Loss: {test_loss}, Accuracy: {test_accuracy}, Precision:{test_precision}, Recall:{test_recall}, F1-score:{test_f1}\n')
         
     def set_seed(self, seed):
         '''
@@ -150,7 +177,6 @@ class ModelWorking:
         random.seed(seed)
         torch.backends.cudnn.deterministic = True
 
-
 # Main program
 if __name__ == '__main__':
     # Parse the input arguments
@@ -158,6 +184,7 @@ if __name__ == '__main__':
     parser.add_argument('--characteristic_list', nargs='+', default=['Smiling', 'Others'], help='Input list')
     args = parser.parse_args()
     
+    # Start training and testing
     analysis = ModelWorking(args.characteristic_list)
     analysis.train()
     analysis.test()
