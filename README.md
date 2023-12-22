@@ -16,9 +16,12 @@ Class EarlyStopping is a tool to save the best model in the training process. If
 ## ResNet.py
 I chose ResNet50 as the training network. It is verified that only one epoch network is needed to achieve 91.38% accuracy for binary classification task and 82.79% accuracy for five-classification task. 
 
+## Conv.py
+I designed Conv, a simple CNN model with 3 conv layers and 2 dense layers. It can be compared with resnet in this task.
+
 ## DenseConv.py
 I designed a multi-layer CNN network as an auxiliary test without careful tuning. Setting batch_size to 1 can be used to classify in general effects. 
-  
+
 ## Main.py
 This is the main program. It contains training and testing process. Every parameter and action is clearly annotated, and you can check it in the code.  
 
