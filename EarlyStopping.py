@@ -2,6 +2,9 @@ import torch
 
 class EarlyStopping:
     def __init__(self, patience=30, checkpoint_path='best_model.pth', mode='max'):
+        '''
+        Tool to stop training when the model is not improving.
+        '''
         self.patience = patience
         self.counter = 0
         self.best_score = None
@@ -18,6 +21,9 @@ class EarlyStopping:
             raise ValueError("Mode should be 'max' or 'min'.")
 
     def step(self, score, model):
+        '''
+        Step function to record the best score and save the best model.
+        '''
         score = torch.tensor(score)
         if self.monitor_op(score, self.best_score):
             self.best_score = score
@@ -32,6 +38,9 @@ class EarlyStopping:
         torch.save(model.state_dict(), self.checkpoint_path)
 
     def load_checkpoint(self, model):
+        '''
+        Load the best model.
+        '''
         model.load_state_dict(torch.load(self.checkpoint_path))
 
     def should_stop(self):
@@ -39,4 +48,4 @@ class EarlyStopping:
       
     def now_count(self):
       return self.counter
-      
+ 
